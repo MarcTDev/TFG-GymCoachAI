@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "GymCoachAI",
+    "slug": "GymCoachAI",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/LogoH.png",
+    "scheme": "gymcoachai",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/LogoH.png"
+      },
+      "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "pan",
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "spa",
+      "favicon": "./assets/images/LogoH.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/LogoH.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "backgroundColor": "#000000"
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
