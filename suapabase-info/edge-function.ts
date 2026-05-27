@@ -1,182 +1,832 @@
-// @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const CEREBRAS_URL  = 'https://api.cerebras.ai/v1/chat/completions'
+const CEREBRAS_MODEL = 'qwen-3-235b-a22b-instruct-2507'
+const GROQ_URL      = 'https://api.groq.com/openai/v1/chat/completions'
+const GROQ_MODEL    = 'llama-3.3-70b-versatile'
+const GEMINI_URL    = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
+const COHERE_URL    = 'https://api.cohere.com/v2/chat'
+const COHERE_MODEL  = 'command-a-03-2025'
+
+interface Perfil {
+  usuario_id: string
+  nombre: string
+  edad: number
+  peso_actual: number
+  altura: number
+  objetivo: string
+  nivel_actividad: string
+  info_adicional: string
+}
+
+// ===== CONEXIÓN A LAS APIS DE INTELIGENCIA ARTIFICIAL =====
+
+// Envía petición a Gemini (Google)
+async function callGemini(apiKey: string, systemPrompt: string, userPrompt: string): Promise<string> {
+  const urlCompleta = `${GEMINI_URL}?key=${apiKey}`
+  
+  const response = await fetch(urlCompleta, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+      generationConfig: { maxOutputTokens: 8192, temperature: 0.7 }
+    }),
+  })
+
+  if (response.ok === false) {
+    const errorTexto = await response.text()
+    throw new Error(`Gemini error ${response.status}: ${errorTexto}`)
+  }
+
+  const data = await response.json()
+  const textoRespuesta = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+  
+  if (textoRespuesta.trim() === '') {
+    throw new Error('Respuesta vacía de Gemini')
+  }
+
+  return textoRespuesta
+}
+
+// Envía petición a APIs compatibles con OpenAI (Groq y Cerebras)
+async function callOpenAICompatible(url: string, apiKey: string, model: string, systemPrompt: string, userPrompt: string): Promise<string> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      max_completion_tokens: 4096,
+    }),
+  })
+
+  if (response.ok === false) {
+    const errorTexto = await response.text()
+    throw new Error(`${url} error ${response.status}: ${errorTexto}`)
+  }
+
+  const data = await response.json()
+  const content = data.choices[0].message.content
+
+  let textoRespuesta = ''
+  if (Array.isArray(content)) {
+    textoRespuesta = content.map(bloque => bloque.text ?? '').join('')
+  } else {
+    textoRespuesta = String(content ?? '')
+  }
+
+  if (textoRespuesta.trim() === '') {
+    throw new Error(`Respuesta vacía de ${url}`)
+  }
+
+  return textoRespuesta
+}
+
+// Envía petición a Cohere
+async function callCohere(apiKey: string, systemPrompt: string, userPrompt: string): Promise<string> {
+  const response = await fetch(COHERE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: COHERE_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+    }),
+  })
+
+  if (response.ok === false) {
+    const errorTexto = await response.text()
+    throw new Error(`Cohere error ${response.status}: ${errorTexto}`)
+  }
+
+  const data = await response.json()
+  const textoRespuesta = data.message?.content?.[0]?.text ?? ''
+
+  if (textoRespuesta.trim() === '') {
+    throw new Error('Respuesta vacía de Cohere')
+  }
+
+  return textoRespuesta
+}
+
+// ===== ORQUESTADOR DE INTELIGENCIA ARTIFICIAL EN CASCADA =====
+
+// Llama en cadena a los proveedores de IA, probando una sola vez cada clave disponible
+async function generarConIA(systemPrompt: string, userPrompt: string): Promise<string> {
+  // Lista de todos los proveedores e intentos posibles en orden
+  const proveedores = [
+    { nombre: 'Groq Clave 1', tipo: 'openai', url: GROQ_URL, model: GROQ_MODEL, key: Deno.env.get('GROQ_API_KEY_1') },
+    { nombre: 'Groq Clave 2', tipo: 'openai', url: GROQ_URL, model: GROQ_MODEL, key: Deno.env.get('GROQ_API_KEY_2') },
+    { nombre: 'Groq Clave 3', tipo: 'openai', url: GROQ_URL, model: GROQ_MODEL, key: Deno.env.get('GROQ_API_KEY_3') },
+    { nombre: 'Groq Clave 4', tipo: 'openai', url: GROQ_URL, model: GROQ_MODEL, key: Deno.env.get('GROQ_API_KEY_4') },
+    
+    { nombre: 'Gemini Clave 1', tipo: 'gemini', key: Deno.env.get('GEMINI_API_KEY_1') },
+    { nombre: 'Gemini Clave 2', tipo: 'gemini', key: Deno.env.get('GEMINI_API_KEY_2') },
+    { nombre: 'Gemini Clave 3', tipo: 'gemini', key: Deno.env.get('GEMINI_API_KEY_3') },
+    
+    { nombre: 'Cohere', tipo: 'cohere', key: Deno.env.get('COHERE_API_KEY') },
+    
+    { nombre: 'Cerebras', tipo: 'openai', url: CEREBRAS_URL, model: CEREBRAS_MODEL, key: Deno.env.get('CEREBRAS_API_KEY') }
+  ]
+
+  // Recorremos la lista uno por uno. El primero que responda con éxito devuelve el texto
+  for (const prov of proveedores) {
+    if (!prov.key) {
+      continue // Si no está configurada la clave, saltamos al siguiente
+    }
+
+    try {
+      console.log(`Probando con ${prov.nombre}...`)
+      
+      if (prov.tipo === 'openai') {
+        const respuesta = await callOpenAICompatible(prov.url!, prov.key, prov.model!, systemPrompt, userPrompt)
+        console.log(`${prov.nombre} exitoso`)
+        return respuesta
+      }
+      
+      if (prov.tipo === 'gemini') {
+        const respuesta = await callGemini(prov.key, systemPrompt, userPrompt)
+        console.log(`${prov.nombre} exitoso`)
+        return respuesta
+      }
+      
+      if (prov.tipo === 'cohere') {
+        const respuesta = await callCohere(prov.key, systemPrompt, userPrompt)
+        console.log(`${prov.nombre} exitoso`)
+        return respuesta
+      }
+    } catch (error: any) {
+      console.log(`${prov.nombre} falló:`, error.message)
+    }
+  }
+
+  throw new Error("Todos los proveedores e intentos de IA fallaron al generar el plan")
+}
+
+// ===== PARSEO DE RESPUESTAS JSON =====
+
+// Limpia y extrae el objeto JSON de la respuesta de la IA
+function parsearJSON(respuesta: string): any {
+  const cleaned = respuesta.replace(/```json/g, '').replace(/```/g, '').trim()
+  const firstBrace = cleaned.indexOf('{')
+  const lastBrace = cleaned.lastIndexOf('}')
+  
+  if (firstBrace === -1 || lastBrace === -1) {
+    throw new Error('Respuesta de la IA no contiene un JSON válido')
+  }
+
+  const jsonRecortado = cleaned.slice(firstBrace, lastBrace + 1)
+  return JSON.parse(jsonRecortado)
+}
+
+// ===== CONTROL DE FECHAS =====
+
+// Calcula las fechas de inicio (lunes) y fin (domingo) para la semana actual
+function getFechasSemana(): { inicio: string; fin: string } {
+  const hoy = new Date()
+  const diaSemana = hoy.getDay()
+  const diffLunes = diaSemana === 0 ? -6 : 1 - diaSemana
+  
+  const lunes = new Date(hoy)
+  lunes.setDate(hoy.getDate() + diffLunes)
+  
+  const domingo = new Date(lunes)
+  domingo.setDate(lunes.getDate() + 6)
+  
+  const inicio = lunes.toISOString().split('T')[0]
+  const fin = domingo.toISOString().split('T')[0]
+  
+  return { inicio, fin }
+}
+
+// ===== ARCHIVAR DATOS EN EL HISTORIAL =====
+
+// Mueve los planes de la semana pasada al historial y borra sus registros locales
+async function archivarSemanaAnterior(supabase: any, usuarioId: string): Promise<void> {
+  const { inicio } = getFechasSemana()
+
+  // 1. Archivar la Rutina antigua
+  const { data: rutinaPasada } = await supabase
+    .from('rutina_semana')
+    .select('*')
+    .eq('usuario_id', usuarioId)
+    .lt('fecha_fin', inicio)
+    .order('fecha_inicio', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (rutinaPasada) {
+    const { data: existeHistorial } = await supabase
+      .from('historial_rutina')
+      .select('id')
+      .eq('usuario_id', usuarioId)
+      .eq('fecha_inicio', rutinaPasada.fecha_inicio)
+      .maybeSingle()
+
+    if (!existeHistorial) {
+      const { data: dias } = await supabase
+        .from('rutina_dia')
+        .select('descripcion')
+        .eq('id_rutina_semana', rutinaPasada.id)
+        .eq('es_descanso', false)
+
+      const grupos = dias?.map((d: any) => d.descripcion).filter(Boolean).join(', ') ?? ''
+
+      const { data: statsEj } = await supabase
+        .from('registro_ejercicio')
+        .select('completado')
+        .eq('usuario_id', usuarioId)
+        .gte('fecha', rutinaPasada.fecha_inicio)
+        .lte('fecha', rutinaPasada.fecha_fin)
+
+      const totalEj = statsEj?.length ?? 0
+      const completadosEj = statsEj?.filter((e: any) => e.completado).length ?? 0
+      
+      let adherenciaEj = 0
+      if (totalEj > 0) {
+        adherenciaEj = Math.round((completadosEj / totalEj) * 100)
+      }
+
+      const { data: extrasEj } = await supabase
+        .from('registro_ejercicio_extra')
+        .select('nombre')
+        .eq('usuario_id', usuarioId)
+        .gte('fecha', rutinaPasada.fecha_inicio)
+        .lte('fecha', rutinaPasada.fecha_fin)
+
+      const { data: diasValoracionEj } = await supabase
+        .from('registro_dia')
+        .select('valoracion_entreno')
+        .eq('usuario_id', usuarioId)
+        .gte('fecha', rutinaPasada.fecha_inicio)
+        .lte('fecha', rutinaPasada.fecha_fin)
+        .not('valoracion_entreno', 'is', null)
+
+      const valoracionMediaEj = diasValoracionEj?.length > 0
+        ? Math.round(diasValoracionEj.reduce((sum: number, d: any) => sum + d.valoracion_entreno, 0) / diasValoracionEj.length)
+        : null
+
+      const feedbackExtrasEj = extrasEj?.length > 0
+        ? `Ejercicios extra: ${extrasEj.map((e: any) => e.nombre).join(', ')}`
+        : null
+
+      await supabase.from('historial_rutina').insert({
+        usuario_id: usuarioId,
+        fecha_inicio: rutinaPasada.fecha_inicio,
+        fecha_fin: rutinaPasada.fecha_fin,
+        descripcion: rutinaPasada.descripcion,
+        nivel_actividad: rutinaPasada.nivel_actividad,
+        grupos_trabajados: grupos,
+        completada: adherenciaEj >= 80,
+        adherencia_pct: adherenciaEj,
+        valoracion: valoracionMediaEj ?? rutinaPasada.valoracion ?? null,
+        feedback: [rutinaPasada.feedback, feedbackExtrasEj].filter(Boolean).join('. ') || null,
+      })
+
+      await supabase.from('rutina_semana').delete().eq('id', rutinaPasada.id)
+
+      await supabase.from('registro_ejercicio')
+        .delete().eq('usuario_id', usuarioId)
+        .gte('fecha', rutinaPasada.fecha_inicio)
+        .lte('fecha', rutinaPasada.fecha_fin)
+      await supabase.from('registro_ejercicio_extra')
+        .delete().eq('usuario_id', usuarioId)
+        .gte('fecha', rutinaPasada.fecha_inicio)
+        .lte('fecha', rutinaPasada.fecha_fin)
+
+      console.log(`Rutina archivada. Adherencia: ${adherenciaEj}%`)
+    }
+  }
+
+  // 2. Archivar la Dieta antigua
+  const { data: dietaPasada } = await supabase
+    .from('dieta_semana')
+    .select('*')
+    .eq('usuario_id', usuarioId)
+    .lt('fecha_fin', inicio)
+    .order('fecha_inicio', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (dietaPasada) {
+    const { data: existeHistorialDieta } = await supabase
+      .from('historial_dieta')
+      .select('id')
+      .eq('usuario_id', usuarioId)
+      .eq('fecha_inicio', dietaPasada.fecha_inicio)
+      .maybeSingle()
+
+    if (!existeHistorialDieta) {
+      const { data: statsComida } = await supabase
+        .from('registro_comida')
+        .select('completada')
+        .eq('usuario_id', usuarioId)
+        .gte('fecha', dietaPasada.fecha_inicio)
+        .lte('fecha', dietaPasada.fecha_fin)
+
+      const totalComidas = statsComida?.length ?? 0
+      const completadasComidas = statsComida?.filter((c: any) => c.completada).length ?? 0
+      
+      let adherenciaDieta = 0
+      if (totalComidas > 0) {
+        adherenciaDieta = Math.round((completadasComidas / totalComidas) * 100)
+      }
+
+      const { data: extrasComida } = await supabase
+        .from('registro_comida_extra')
+        .select('kcal')
+        .eq('usuario_id', usuarioId)
+        .gte('fecha', dietaPasada.fecha_inicio)
+        .lte('fecha', dietaPasada.fecha_fin)
+
+      const kcalExtras = extrasComida?.reduce((sum: number, c: any) => sum + (c.kcal ?? 0), 0) ?? 0
+
+      const { data: diasValoracionDieta } = await supabase
+        .from('registro_dia')
+        .select('valoracion_dieta')
+        .eq('usuario_id', usuarioId)
+        .gte('fecha', dietaPasada.fecha_inicio)
+        .lte('fecha', dietaPasada.fecha_fin)
+        .not('valoracion_dieta', 'is', null)
+
+      const valoracionMediaDieta = diasValoracionDieta?.length > 0
+        ? Math.round(diasValoracionDieta.reduce((sum: number, d: any) => sum + d.valoracion_dieta, 0) / diasValoracionDieta.length)
+        : null
+
+      const feedbackExtrasComida = kcalExtras > 0
+        ? `Kcal extra semana: ${kcalExtras}`
+        : null
+
+      await supabase.from('historial_dieta').insert({
+        usuario_id: usuarioId,
+        fecha_inicio: dietaPasada.fecha_inicio,
+        fecha_fin: dietaPasada.fecha_fin,
+        calorias_objetivo: dietaPasada.calorias_dia,
+        descripcion: dietaPasada.descripcion,
+        completada: adherenciaDieta >= 80,
+        adherencia_pct: adherenciaDieta,
+        valoracion: valoracionMediaDieta ?? dietaPasada.valoracion ?? null,
+        feedback: [dietaPasada.feedback, feedbackExtrasComida].filter(Boolean).join('. ') || null,
+      })
+
+      await supabase.from('dieta_semana').delete().eq('id', dietaPasada.id)
+
+      await supabase.from('registro_comida')
+        .delete().eq('usuario_id', usuarioId)
+        .gte('fecha', dietaPasada.fecha_inicio)
+        .lte('fecha', dietaPasada.fecha_fin)
+      await supabase.from('registro_comida_extra')
+        .delete().eq('usuario_id', usuarioId)
+        .gte('fecha', dietaPasada.fecha_inicio)
+        .lte('fecha', dietaPasada.fecha_fin)
+
+      console.log(`Dieta archivada. Adherencia: ${adherenciaDieta}%`)
+    }
+  }
+
+  // 3. Limpiar registros diarios antiguos
+  await supabase.from('registro_dia')
+    .delete()
+    .eq('usuario_id', usuarioId)
+    .lt('fecha', inicio)
+
+  console.log('Registro diario de la semana anterior eliminado')
+}
+
+// ===== GENERACIÓN DE LA RUTINA =====
+
+// Genera la rutina de entrenamiento adaptada al perfil e historial
+async function generarRutina(
+  supabase: any,
+  perfil: Perfil,
+  historialRutinas: any[],
+  ejercicios: any[],
+  fechas: { inicio: string; fin: string },
+  feedback?: string,
+): Promise<string> {
+
+  const ejerciciosTexto = ejercicios
+    .map(e => `${e.id}|${e.nombre}|${e.grupo_muscular}|${e.dificultad}`)
+    .join('\n')
+
+  const historialTexto = historialRutinas.length > 0
+    ? historialRutinas.map(h =>
+        `${h.fecha_inicio}: grupos=${h.grupos_trabajados} adherencia=${h.adherencia_pct}% val=${h.valoracion} feedback=${h.feedback || 'ninguno'}`
+      ).join('\n')
+    : 'Primera semana del usuario'
+
+  const systemPrompt = `Eres un generador de rutinas de entrenamiento.
+Devuelve ÚNICAMENTE JSON válido sin texto adicional ni markdown.
+Sé muy conciso en textos, máximo 6 palabras por campo.`
+
+  const userPrompt = `
+PERFIL: ${perfil.nombre}, ${perfil.edad}a, ${perfil.peso_actual}kg, objetivo: ${perfil.objetivo}, nivel: ${perfil.nivel_actividad}
+RESTRICCIONES: ${perfil.info_adicional || 'ninguna'}
+${feedback ? `FEEDBACK USUARIO: ${feedback}` : ''}
+HISTORIAL: ${historialTexto}
+
+EJERCICIOS (id|nombre|grupo|dificultad):
+${ejerciciosTexto}
+
+Genera 7 días de entrenamiento. Usa SOLO los IDs del listado.
+Incluye 2 días de descanso. Para días de descanso, ejercicios=[].
+
+JSON exacto:
+{
+  "descripcion": "texto breve",
+  "nivel_actividad": "intermedio",
+  "dias": [
+    {
+      "dia_semana": 1,
+      "es_descanso": false,
+      "nombre_sesion": "Pecho y Tríceps",
+      "descripcion": "Empuje",
+      "grupos_trabajados": "pecho, triceps",
+      "ejercicios": [
+        {
+          "id_ejercicio": "uuid",
+          "orden": 1,
+          "series": 4,
+          "repeticiones": 8,
+          "duracion_seg": 0,
+          "descanso_seg": 90,
+          "notas": ""
+        }
+      ]
+    }
+  ]
+}`
+
+  console.log('Pidiendo rutina a la IA...')
+  const respuesta = await generarConIA(systemPrompt, userPrompt)
+  const plan = parsearJSON(respuesta)
+
+  // Si ya existía una rutina esta semana, la borramos para no duplicar
+  const { data: existente } = await supabase
+    .from('rutina_semana')
+    .select('id')
+    .eq('usuario_id', perfil.usuario_id)
+    .eq('fecha_inicio', fechas.inicio)
+    .maybeSingle()
+
+  if (existente) {
+    await supabase.from('rutina_semana').delete().eq('id', existente.id)
+  }
+
+  const { data: rutinaSemana, error: errorRS } = await supabase
+    .from('rutina_semana')
+    .insert({
+      usuario_id: perfil.usuario_id,
+      fecha_inicio: fechas.inicio,
+      fecha_fin: fechas.fin,
+      descripcion: plan.descripcion,
+      nivel_actividad: plan.nivel_actividad,
+    })
+    .select()
+    .single()
+
+  if (errorRS) {
+    throw new Error(`Error insertando rutina_semana: ${errorRS.message}`)
+  }
+
+  // Guardar los días y ejercicios
+  for (const dia of plan.dias) {
+    const { data: rutinaDia, error: errorRD } = await supabase
+      .from('rutina_dia')
+      .insert({
+        id_rutina_semana: rutinaSemana.id,
+        dia_semana: dia.dia_semana,
+        es_descanso: dia.es_descanso,
+        nombre_sesion: dia.nombre_sesion || null,
+        descripcion: dia.descripcion || null,
+      })
+      .select()
+      .single()
+
+    if (errorRD) {
+      throw new Error(`Error insertando rutina_dia: ${errorRD.message}`)
+    }
+
+    if (dia.es_descanso === false && dia.ejercicios?.length > 0) {
+      const ejerciciosInsertar = []
+      
+      for (const e of dia.ejercicios) {
+        ejerciciosInsertar.push({
+          id_rutina_dia: rutinaDia.id,
+          id_ejercicio: e.id_ejercicio,
+          orden: e.orden,
+          series: e.series || null,
+          repeticiones: e.repeticiones || null,
+          duracion_seg: e.duracion_seg || null,
+          descanso_seg: e.descanso_seg || null,
+          notas: e.notas || null,
+        })
+      }
+
+      const { error: errorRE } = await supabase
+        .from('rutina_ejercicio')
+        .insert(ejerciciosInsertar)
+
+      if (errorRE) {
+        throw new Error(`Error insertando rutina_ejercicio: ${errorRE.message}`)
+      }
+    }
+  }
+
+  console.log('Rutina guardada con éxito')
+  return rutinaSemana.id
+}
+
+// ===== GENERACIÓN DE LA DIETA =====
+
+// Genera el plan de alimentación adaptado al perfil e historial
+async function generarDieta(
+  supabase: any,
+  perfil: Perfil,
+  historialDietas: any[],
+  recetas: any[],
+  fechas: { inicio: string; fin: string },
+  feedback?: string,
+): Promise<string> {
+
+  const recipesTexto = recetas
+    .map(r => `${r.id}|${r.nombre}|${r.kcal}kcal|${r.tipo_comida}|P:${r.proteinas_g}g C:${r.carbos_g}g G:${r.grasas_g}g|alerg:${r.alergenos || 'ninguno'}`)
+    .join('\n')
+
+  const historialTexto = historialDietas.length > 0
+    ? historialDietas.map(h =>
+        `${h.fecha_inicio}: cal=${h.calorias_objetivo} adherencia=${h.adherencia_pct}% val=${h.valoracion} feedback=${h.feedback || 'ninguno'}`
+      ).join('\n')
+    : 'Primera semana del usuario'
+
+  const systemPrompt = `Eres un generador de planes de nutrición personalizados.
+Devuelve ÚNICAMENTE JSON válido sin texto adicional ni markdown.
+Sé muy conciso en textos, máximo 6 palabras por campo.`
+
+  const userPrompt = `
+PERFIL: ${perfil.nombre}, ${perfil.edad}a, ${perfil.peso_actual}kg, objetivo: ${perfil.objetivo}
+RESTRICCIONES/ALERGIAS: ${perfil.info_adicional || 'ninguna'}
+${feedback ? `FEEDBACK USUARIO: ${feedback}` : ''}
+HISTORIAL: ${historialTexto}
+
+RECETAS (id|nombre|kcal|tipo|macros|alergenos):
+${recipesTexto}
+
+Genera plan de dieta para 7 días. Usa SOLO los IDs del listado.
+Respeta alergias. Ajusta calorías al objetivo.
+Incluye desayuno, almuerzo, cena y snack cada día.
+IMPORTANTE: Cada día debe tener recetas DIFERENTES. No repitas el mismo id_receta en más de 2 días distintos. Varía al máximo las comidas entre días.
+
+JSON exacto:
+{
+  "descripcion": "texto breve",
+  "calorias_dia": 2200,
+  "dias": [
+    {
+      "dia_semana": 1,
+      "calorias_dia": 2200,
+      "descripcion": "Día normal",
+      "comidas": [
+        {
+          "id_receta": "uuid",
+          "tipo_comida": "desayuno",
+          "orden": 1,
+          "cantidad_g": 300,
+          "notas": ""
+        }
+      ]
+    }
+  ]
+}`
+
+  console.log('Pidiendo dieta a la IA...')
+  const respuesta = await generarConIA(systemPrompt, userPrompt)
+  const plan = parsearJSON(respuesta)
+
+  // Si ya existía una dieta esta semana, la borramos para no duplicar
+  const { data: existente } = await supabase
+    .from('dieta_semana')
+    .select('id')
+    .eq('usuario_id', perfil.usuario_id)
+    .eq('fecha_inicio', fechas.inicio)
+    .maybeSingle()
+
+  if (existente) {
+    await supabase.from('dieta_semana').delete().eq('id', existente.id)
+  }
+
+  const { data: dietaSemana, error: errorDS } = await supabase
+    .from('dieta_semana')
+    .insert({
+      usuario_id: perfil.usuario_id,
+      fecha_inicio: fechas.inicio,
+      fecha_fin: fechas.fin,
+      calorias_dia: plan.calorias_dia,
+      descripcion: plan.descripcion,
+    })
+    .select()
+    .single()
+
+  if (errorDS) {
+    throw new Error(`Error insertando dieta_semana: ${errorDS.message}`)
+  }
+
+  // Guardar los días y comidas
+  for (const dia of plan.dias) {
+    const { data: dietaDia, error: errorDD } = await supabase
+      .from('dieta_dia')
+      .insert({
+        id_dieta_semana: dietaSemana.id,
+        dia_semana: dia.dia_semana,
+        calorias_dia: dia.calorias_dia,
+        descripcion: dia.descripcion || null,
+      })
+      .select()
+      .single()
+
+    if (errorDD) {
+      throw new Error(`Error insertando dieta_dia: ${errorDD.message}`)
+    }
+
+    if (dia.comidas?.length > 0) {
+      const comidasInsertar = []
+      
+      for (const c of dia.comidas) {
+        comidasInsertar.push({
+          id_dieta_dia: dietaDia.id,
+          id_receta: c.id_receta,
+          tipo_comida: c.tipo_comida,
+          orden: c.orden,
+          cantidad_g: c.cantidad_g || null,
+          notas: c.notas || null,
+        })
+      }
+
+      const { error: errorDC } = await supabase
+        .from('dieta_comida')
+        .insert(comidasInsertar)
+
+      if (errorDC) {
+        throw new Error(`Error insertando dieta_comida: ${errorDC.message}`)
+      }
+    }
+  }
+
+  console.log('Dieta guardada con éxito')
+  return dietaSemana.id
+}
+
+// ===== ORQUESTACIÓN COMPLETA Y ROLLBACK =====
+
+// Si falla la generación de la dieta después de la rutina, deshace los cambios (Rollback)
+async function generarPlanParaUsuario(supabase: any, usuarioId: string, feedback?: string): Promise<void> {
+  console.log(`Generando plan completo para el usuario: ${usuarioId}`)
+
+  // Obtener los datos del perfil
+  const { data: perfil, error: errorPerfil } = await supabase
+    .from('perfil')
+    .select('*')
+    .eq('usuario_id', usuarioId)
+    .maybeSingle()
+
+  if (errorPerfil || !perfil) {
+    throw new Error(`Perfil no encontrado para el usuario ${usuarioId}`)
+  }
+
+  // Obtener historiales anteriores
+  const { data: historialRutinas } = await supabase
+    .from('historial_rutina')
+    .select('fecha_inicio, grupos_trabajados, completada, adherencia_pct, valoracion, feedback')
+    .eq('usuario_id', usuarioId)
+    .order('fecha_inicio', { ascending: false })
+    .limit(4)
+
+  const { data: historialDietas } = await supabase
+    .from('historial_dieta')
+    .select('fecha_inicio, calorias_objetivo, completada, adherencia_pct, valoracion, feedback')
+    .eq('usuario_id', usuarioId)
+    .order('fecha_inicio', { ascending: false })
+    .limit(4)
+
+  // Obtener catálogo aleatorio de la base de datos
+  const { data: ejercicios, error: errorEj } = await supabase
+    .rpc('get_ejercicios_aleatorios', { limite: 30 })
+
+  if (errorEj || !ejercicios?.length) {
+    throw new Error('No hay ejercicios en el catálogo')
+  }
+
+  const { data: recetas, error: errorRec } = await supabase
+    .rpc('get_recetas_aleatorias', { limite: 20 })
+
+  if (errorRec || !recetas?.length) {
+    throw new Error('No hay recetas en el catálogo')
+  }
+
+  // Archivar la semana anterior si correspondiera
+  await archivarSemanaAnterior(supabase, usuarioId)
+
+  const fechas = getFechasSemana()
+
+  let rutinaSemanaId: string | null = null
+  let dietaSemanaId: string | null = null
+
+  try {
+    // 1. Generar e Insertar Rutina
+    rutinaSemanaId = await generarRutina(
+      supabase, perfil, historialRutinas ?? [], ejercicios, fechas, feedback
+    )
+
+    // 2. Generar e Insertar Dieta
+    dietaSemanaId = await generarDieta(
+      supabase, perfil, historialDietas ?? [], recetas, fechas, feedback
+    )
+
+    console.log(`Plan semanal completo generado con éxito para ${usuarioId}`)
+
+  } catch (error: any) {
+    console.error('Fallo en la generación. Ejecutando Rollback...', error.message)
+
+    // Si guardamos la rutina pero falló la dieta, borramos la rutina parcial
+    if (rutinaSemanaId !== null) {
+      await supabase.from('rutina_semana').delete().eq('id', rutinaSemanaId)
+      console.log('Rutina parcial eliminada con éxito')
+    }
+
+    if (dietaSemanaId !== null) {
+      await supabase.from('dieta_semana').delete().eq('id', dietaSemanaId)
+      console.log('Dieta parcial eliminada con éxito')
+    }
+
+    throw error
+  }
+}
+
+// ===== HANDLER PRINCIPAL (SERVIDOR DENO) =====
 
 Deno.serve(async (req: Request) => {
   try {
-    // 1. Conexión a la base de datos (con permisos de administrador)
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    )
 
-    // 2. Leemos qué usuario nos ha llamado
-    const { usuario_id } = await req.json();
+    const body = await req.json().catch(() => ({}))
+    const { usuario_id, feedback } = body
 
-    if (!usuario_id) {
-      throw new Error("No se ha enviado el usuario_id");
-    }
+    // Si recibimos un usuario_id, generamos solo para él
+    if (usuario_id) {
+      await generarPlanParaUsuario(supabaseAdmin, usuario_id, feedback)
+      return new Response(
+        JSON.stringify({ ok: true, usuario_id }),
+        { headers: { 'Content-Type': 'application/json' } },
+      )
+    } else {
+      // Si no recibimos id, generamos de forma masiva para todos los perfiles activos
+      const { data: perfiles, error } = await supabaseAdmin
+        .from('perfil')
+        .select('usuario_id')
+        .not('objetivo', 'is', null)
+        .not('peso_actual', 'is', null)
 
-    console.log("Iniciando generación de plan para el usuario:", usuario_id);
+      if (error) {
+        throw error
+      }
 
-    // 3. Sacamos los datos del usuario para pasárselos a la IA
-    const { data: perfil } = await supabase.from('perfil').select('*').eq('usuario_id', usuario_id).single();
-    if (!perfil) {
-      throw new Error("No se encontró el perfil del usuario");
-    }
-
-    // 4. Sacamos unos cuantos ejercicios y recetas aleatorias del catálogo para que la IA elija
-    const { data: ejercicios } = await supabase.rpc('get_ejercicios_aleatorios', { limite: 30 });
-    const { data: recetas } = await supabase.rpc('get_recetas_aleatorias', { limite: 20 });
-
-    const groqApiKey = Deno.env.get('GROQ_API_KEY') ?? '';
-
-    // ==========================================
-    // PARTE 1: GENERAR RUTINA DE ENTRENAMIENTO
-    // ==========================================
-    
-    // Le explicamos a la IA cómo queremos el JSON
-    const promptRutina = `
-      Perfil del usuario: ${perfil.nombre}, Objetivo: ${perfil.objetivo}. 
-      Crea 7 días de rutina. Incluye al menos 2 días de descanso.
-      Usa SOLO estos IDs de ejercicios que te paso: ${JSON.stringify(ejercicios.map(e => e.id))}. 
-      Devuelve SOLO un JSON con este formato exacto: 
-      {"descripcion":"...","nivel_actividad":"...","dias":[{"dia_semana":1,"es_descanso":false,"nombre_sesion":"...","descripcion":"...","ejercicios":[{"id_ejercicio":"...","orden":1,"series":3,"repeticiones":10,"descanso_seg":60}]}]}
-    `;
-    
-    console.log("Pidiendo rutina a Groq...");
-    const resRutina = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json', 
-        'Authorization': `Bearer ${groqApiKey}` 
-      },
-      body: JSON.stringify({ 
-        model: 'llama-3.3-70b-versatile', 
-        messages: [{ role: 'user', content: promptRutina }] 
-      })
-    });
-    
-    const dataRutina = await resRutina.json();
-    
-    // Limpiamos el texto por si la IA le pone comillas de código (```json)
-    let txtRutina = dataRutina.choices[0].message.content;
-    txtRutina = txtRutina.replace(/```json/g, '').replace(/```/g, '').trim();
-    
-    const planRutina = JSON.parse(txtRutina);
-
-    // Calculamos la fecha de hoy para empezar el plan
-    const fechaInicio = new Date().toISOString().split('T')[0];
-    
-    // Guardamos la rutina semanal
-    const { data: rutSemana } = await supabase.from('rutina_semana').insert({ 
-      usuario_id: usuario_id, 
-      fecha_inicio: fechaInicio, 
-      fecha_fin: fechaInicio, 
-      descripcion: planRutina.descripcion, 
-      nivel_actividad: planRutina.nivel_actividad 
-    }).select().single();
-
-    // Guardamos los días y los ejercicios uno por uno
-    for (let i = 0; i < planRutina.dias.length; i++) {
-      const dia = planRutina.dias[i];
-      const { data: rutDia } = await supabase.from('rutina_dia').insert({ 
-        id_rutina_semana: rutSemana.id, 
-        dia_semana: dia.dia_semana, 
-        es_descanso: dia.es_descanso, 
-        nombre_sesion: dia.nombre_sesion 
-      }).select().single();
-      
-      if (!dia.es_descanso && dia.ejercicios) {
-        for (let j = 0; j < dia.ejercicios.length; j++) {
-          const ej = dia.ejercicios[j];
-          await supabase.from('rutina_ejercicio').insert({ 
-            id_rutina_dia: rutDia.id, 
-            id_ejercicio: ej.id_ejercicio, 
-            orden: ej.orden, 
-            series: ej.series, 
-            repeticiones: ej.repeticiones, 
-            descanso_seg: ej.descanso_seg 
-          });
+      const resultados = []
+      for (const p of perfiles ?? []) {
+        try {
+          await generarPlanParaUsuario(supabaseAdmin, p.usuario_id)
+          resultados.push({ usuario_id: p.usuario_id, ok: true })
+        } catch (e: any) {
+          resultados.push({ usuario_id: p.usuario_id, ok: false, error: e.message })
+          console.error(`Error en usuario ${p.usuario_id}:`, e)
         }
       }
+
+      return new Response(
+        JSON.stringify({ ok: true, resultados }),
+        { headers: { 'Content-Type': 'application/json' } },
+      )
     }
-
-
-    // ==========================================
-    // PARTE 2: GENERAR DIETA
-    // ==========================================
-    
-    const promptDieta = `
-      Perfil del usuario: ${perfil.nombre}, Objetivo: ${perfil.objetivo}. 
-      Crea 7 días de dieta.
-      Usa SOLO estos IDs de recetas: ${JSON.stringify(recetas.map(r => r.id))}. 
-      Devuelve SOLO un JSON con este formato exacto: 
-      {"descripcion":"...","calorias_dia":2000,"dias":[{"dia_semana":1,"calorias_dia":2000,"descripcion":"...","comidas":[{"id_receta":"...","tipo_comida":"desayuno","orden":1}]}]}
-    `;
-    
-    console.log("Pidiendo dieta a Groq...");
-    const resDieta = await fetch('[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json', 
-        'Authorization': `Bearer ${groqApiKey}` 
-      },
-      body: JSON.stringify({ 
-        model: 'llama-3.3-70b-versatile', 
-        messages: [{ role: 'user', content: promptDieta }] 
-      })
-    });
-
-    const dataDieta = await resDieta.json();
-    let txtDieta = dataDieta.choices[0].message.content;
-    txtDieta = txtDieta.replace(/```json/g, '').replace(/```/g, '').trim();
-    
-    const planDieta = JSON.parse(txtDieta);
-
-    // Guardamos la dieta semanal
-    const { data: dietSemana } = await supabase.from('dieta_semana').insert({ 
-      usuario_id: usuario_id, 
-      fecha_inicio: fechaInicio, 
-      fecha_fin: fechaInicio, 
-      calorias_dia: planDieta.calorias_dia, 
-      descripcion: planDieta.descripcion 
-    }).select().single();
-
-    // Guardamos los días y las comidas
-    for (let i = 0; i < planDieta.dias.length; i++) {
-      const dia = planDieta.dias[i];
-      const { data: dietDia } = await supabase.from('dieta_dia').insert({ 
-        id_dieta_semana: dietSemana.id, 
-        dia_semana: dia.dia_semana, 
-        calorias_dia: dia.calorias_dia 
-      }).select().single();
-      
-      if (dia.comidas) {
-        for (let j = 0; j < dia.comidas.length; j++) {
-          const com = dia.comidas[j];
-          await supabase.from('dieta_comida').insert({ 
-            id_dieta_dia: dietDia.id, 
-            id_receta: com.id_receta, 
-            tipo_comida: com.tipo_comida, 
-            orden: com.orden 
-          });
-        }
-      }
-    }
-
-    console.log("¡Plan generado y guardado con éxito!");
-
-    // Devolvemos respuesta afirmativa
-    return new Response(JSON.stringify({ ok: true }), { 
-      headers: { 'Content-Type': 'application/json' } 
-    });
-
-  } catch (error: any) {
-    console.error("Error al generar el plan:", error.message);
-    
-    // Devolvemos el error
-    return new Response(JSON.stringify({ ok: false, error: error.message }), { 
-      status: 500, 
-      headers: { 'Content-Type': 'application/json' } 
-    });
+  } catch (e: any) {
+    console.error('Error crítico en Edge Function:', e)
+    return new Response(
+      JSON.stringify({ ok: false, error: e.message }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    )
   }
-});
+})

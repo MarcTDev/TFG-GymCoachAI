@@ -1,3 +1,4 @@
+import React from 'react';
 import { fireEvent, render } from "@testing-library/react-native";
 import LoginScreen from "../auth/login";
 
@@ -6,7 +7,10 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 );
 
 jest.mock("expo-router", () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({
+    push: jest.fn(),
+    replace: jest.fn(),
+  }),
   Link: ({ children }: any) => children,
 }));
 
@@ -18,26 +22,24 @@ jest.mock('../../lib/supabase', () => ({
   },
 }));
 
-describe("Pruebas funcionales de la pantalla de Login", () => {
-  test("Debe renderizar el título y el subtítulo en español", () => {
+describe("Pruebas de Login", () => {
+  test("Debe mostrar el título de bienvenida", () => {
     const { getByText } = render(<LoginScreen />);
-
     expect(getByText("Bienvenido")).toBeTruthy();
     expect(getByText("Inicia sesión para continuar")).toBeTruthy();
   });
 
-  test("Debe permitir escribir en el campo de correo", () => {
+  test("Debe escribir en el campo de correo", () => {
     const { getByPlaceholderText } = render(<LoginScreen />);
-
-    const inputEmail = getByPlaceholderText("correo@ejemplo.com");
-    fireEvent.changeText(inputEmail, "alumno@tfg.com");
-    expect(inputEmail.props.value).toBe("alumno@tfg.com");
+    const campoEmail = getByPlaceholderText("correo@ejemplo.com");
+    fireEvent.changeText(campoEmail, "alumno@tfg.com");
+    expect(campoEmail.props.value).toBe("alumno@tfg.com");
   });
 
-  test("Debe mostrar el botón de Entrar", () => {
+  test("Debe mostrar el botón de entrar", () => {
     const { getByText } = render(<LoginScreen />);
-    const boton = getByText("Entrar");
-
-    expect(boton).toBeTruthy();
+    expect(getByText("Entrar")).toBeTruthy();
   });
 });
+
+

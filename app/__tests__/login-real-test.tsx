@@ -8,10 +8,10 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 
-const mockReplace = jest.fn();
+const mockFuncionNavegacionSimulada = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({
-    replace: mockReplace,
+    replace: mockFuncionNavegacionSimulada,
   }),
   Link: 'Link',
 }));
@@ -26,41 +26,50 @@ jest.mock('../../lib/supabase', () => ({
 
 jest.spyOn(Alert, 'alert');
 
-describe('Pruebas funcionales de la pantalla de Login (Supabase)', () => {
+describe('Pruebas funcionales de Login con Supabase', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('Login fallido: Debe bloquear la ejecución y mostrar error si hay campos vacíos', async () => {
+  it('Debe mostrar errores si hay campos vacíos', async () => {
     const { getByText } = render(<LoginScreen />);
     
-    const submitButton = getByText('Entrar');
-    fireEvent.press(submitButton);
+    const botonEntrar = getByText('Entrar');
+    fireEvent.press(botonEntrar);
 
     expect(getByText('Introduce tu correo electrónico')).toBeTruthy();
     expect(getByText('Introduce tu contraseña')).toBeTruthy();
     expect(supabase.auth.signInWithPassword).not.toHaveBeenCalled();
   });
 
-  it('Login exitoso: Debe autenticar con Supabase y navegar al Dashboard con credenciales válidas', async () => {
+  it('Debe iniciar sesión y navegar al home con credenciales válidas', async () => {
     (supabase.auth.signInWithPassword as jest.Mock).mockResolvedValueOnce({
       error: null,
-      data: { user: { id: '123' }, session: {} }
+      data: { 
+        user: { id: '123-estudiante' }, 
+        session: { access_token: 'token-valido' } 
+      }
     });
 
     const { getByText, getByPlaceholderText } = render(<LoginScreen />);
 
-    fireEvent.changeText(getByPlaceholderText('correo@ejemplo.com'), 'test@test.com');
-    fireEvent.changeText(getByPlaceholderText('••••••••••••'), 'password123');
+    const campoEmail = getByPlaceholderText('correo@ejemplo.com');
+    const campoPassword = getByPlaceholderText('••••••••••••');
+    
+    fireEvent.changeText(campoEmail, 'test@estudiante.com');
+    fireEvent.changeText(campoPassword, 'segura123');
 
-    fireEvent.press(getByText('Entrar'));
+    const botonEntrar = getByText('Entrar');
+    fireEvent.press(botonEntrar);
 
     await waitFor(() => {
       expect(supabase.auth.signInWithPassword).toHaveBeenCalledWith({
-        email: 'test@test.com',
-        password: 'password123',
+        email: 'test@estudiante.com',
+        password: 'segura123',
       });
-      expect(mockReplace).toHaveBeenCalledWith('/(tabs)/workout');
+      expect(mockFuncionNavegacionSimulada).toHaveBeenCalledWith('/(tabs)/workout');
     });
   });
 });
+
+
