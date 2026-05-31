@@ -326,7 +326,7 @@ export default function ScannerScreen() {
             {cargandoDieta ? (
               <ActivityIndicator size="large" color={Colors.primary} style={{ marginVertical: 30 }} />
             ) : (
-              <View style={{flex: 1}}>
+              <View>
                 <ScrollView style={{ flexShrink: 1 }} showsVerticalScrollIndicator={false}>
                   {comidasDia.length > 0 && (
                     <View>
