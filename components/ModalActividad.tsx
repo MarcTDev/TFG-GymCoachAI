@@ -87,7 +87,7 @@ export function ModalActividad({ visible, onClose, onSuccess }: Props) {
           </View>
 
           {!ejSel ? (
-            <View style={{flex: 1}}>
+            <View>
               <View style={styles.searchBox}>
                 <FontAwesome name="search" size={13} color={colors.textSecondary} />
                 <TextInput

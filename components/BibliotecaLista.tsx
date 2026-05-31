@@ -142,7 +142,7 @@ const makeStyles = (colors: ColorScheme) => StyleSheet.create({
   countText: { fontFamily: "NotoSans", fontSize: 13, fontWeight: "bold", color: Colors.primary },
   searchBox: { flexDirection: "row", alignItems: "center", backgroundColor: colors.surface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, borderWidth: 1, borderColor: colors.divider, marginHorizontal: 20, marginBottom: 12, gap: 10 },
   searchInput: { flex: 1, fontFamily: "NotoSans", fontSize: 14, color: colors.text },
-  catScroll: { flexGrow: 0, marginBottom: 16 },
+  catScroll: { flexGrow: 0, height: 50, marginBottom: 8 },
   catContent: { paddingHorizontal: 20, gap: 8, alignItems: "center" },
   catChip: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.divider },
   catChipActiva: { backgroundColor: Colors.primary, borderColor: Colors.primary },

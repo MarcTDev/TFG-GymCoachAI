@@ -282,7 +282,7 @@ export default function WorkoutScreen() {
         <View style={{ height: 2, backgroundColor: colors.divider, marginTop: 24, marginBottom: 4 }} />
 
         <Pressable style={styles.btnBiblioteca} onPress={() => router.push("/ejercicio/biblioteca")}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1, marginRight: 12 }}>
             <View style={styles.iconoBiblioteca}><FontAwesome name="book-open" size={16} color={Colors.primary} solid /></View>
             <View>
               <Text style={styles.btnBibliotecaTitulo}>Biblioteca de ejercicios</Text>

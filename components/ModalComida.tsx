@@ -176,7 +176,7 @@ export function ModalComida({ visible, onClose, tipo_comida, onSuccess, esSustit
             <Text style={[styles.tabText, tab === 'buscar' && styles.tabTextActive]}>Buscar</Text>
           </Pressable>
           <Pressable style={[styles.tab, tab === 'escaner' && styles.tabActive]} onPress={() => setTab('escaner')}>
-            <Text style={[styles.tabText, tab === 'escaner' && styles.tabTextActive]}>Cámara IA</Text>
+            <Text style={[styles.tabText, tab === 'escaner' && styles.tabTextActive]}>Escáner AI</Text>
           </Pressable>
         </View>
 
@@ -246,10 +246,11 @@ export function ModalComida({ visible, onClose, tipo_comida, onSuccess, esSustit
               </CameraView>
             ) : estadoCam === 'camara' && !permission?.granted ? (
               <View style={styles.permisoBox}>
-                <FontAwesome name="camera" size={36} color="#fff" />
-                <Text style={styles.permisoText}>Necesitamos acceso a la cámara para analizar el plato.</Text>
-                <Pressable style={styles.btnPrimary} onPress={requestPermission}>
-                  <Text style={styles.btnPrimaryText}>Permitir cámara</Text>
+                <FontAwesome name="camera" size={56} color="#8A8F9C" />
+                <Text style={{ fontSize: 20, fontWeight: "bold", color: "#fff", marginTop: 10 }}>Acceso a la cámara</Text>
+                <Text style={styles.permisoText}>Necesitamos acceso para analizar platos e ingredientes.</Text>
+                <Pressable style={[styles.btnPrimary, { width: "100%", flex: 0, marginTop: 10 }]} onPress={requestPermission}>
+                  <Text style={styles.btnPrimaryText}>Permitir</Text>
                 </Pressable>
               </View>
             ) : fotoUri ? (
@@ -258,8 +259,8 @@ export function ModalComida({ visible, onClose, tipo_comida, onSuccess, esSustit
 
             {estadoCam === 'analizando' && (
               <View style={styles.overlayAnalizando}>
-                <ActivityIndicator size="large" color={Colors.primary} />
-                <Text style={{ color: '#fff', marginTop: 10 }}>Analizando...</Text>
+                <ActivityIndicator size="large" color={Colors.secondary} />
+                <Text style={{ color: '#fff', marginTop: 10, fontWeight: "bold" }}>Analizando con IA...</Text>
               </View>
             )}
 
@@ -267,6 +268,9 @@ export function ModalComida({ visible, onClose, tipo_comida, onSuccess, esSustit
               <View style={styles.resultCard}>
                 <Text style={styles.previewNombre}>{resultadoIA.nombre}</Text>
                 <Text style={styles.kcalGrande}>{resultadoIA.kcal} kcal</Text>
+                <Text style={styles.macros}>
+                  Proteínas: {resultadoIA.proteinas_g}g  |  Carbos: {resultadoIA.carbos_g}g  |  Grasas: {resultadoIA.grasas_g}g
+                </Text>
                 <View style={styles.previewBtns}>
                   <Pressable style={styles.btnSecondary} onPress={() => { setFotoUri(null); setResultadoIA(null); setEstadoCam('camara'); }}>
                     <Text style={styles.btnSecondaryText}>Reintentar</Text>
@@ -301,17 +305,18 @@ const makeStyles = (colors: ColorScheme) => StyleSheet.create({
   resultRow: { backgroundColor: colors.surface, padding: 15, borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: colors.divider },
   preview: { backgroundColor: colors.surface, padding: 20, borderRadius: 10, borderWidth: 1, borderColor: colors.divider, alignItems: 'center' },
   previewNombre: { fontSize: 18, fontWeight: 'bold', marginBottom: 10, color: colors.text },
-  kcalGrande: { fontSize: 30, fontWeight: 'bold', color: Colors.secondary, marginBottom: 20 },
+  kcalGrande: { fontSize: 30, fontWeight: 'bold', color: Colors.secondary, marginBottom: 6 },
+  macros: { fontSize: 14, color: colors.textSecondary, marginBottom: 20, textAlign: 'center' },
   previewBtns: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 10 },
   btnPrimary: { flex: 1, backgroundColor: Colors.secondary, padding: 15, borderRadius: 10, alignItems: 'center' },
   btnPrimaryText: { color: '#fff', fontWeight: 'bold' },
   btnSecondary: { flex: 1, backgroundColor: colors.inputBackground, padding: 15, borderRadius: 10, alignItems: 'center' },
   btnSecondaryText: { color: colors.text, fontWeight: 'bold' },
   manualForm: { padding: 10 },
-  shutterBtn: { position: 'absolute', bottom: 40, alignSelf: 'center', width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.3)', justifyContent: 'center', alignItems: 'center' },
+  shutterBtn: { position: 'absolute', bottom: 40, alignSelf: 'center', width: 70, height: 70, borderRadius: 35, borderWidth: 4, borderColor: '#fff', justifyContent: 'center', alignItems: 'center' },
   shutterInner: { width: 50, height: 50, borderRadius: 25, backgroundColor: Colors.secondary },
   permisoBox: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30, gap: 16 },
-  permisoText: { color: '#fff', fontSize: 14, textAlign: 'center' },
+  permisoText: { color: '#8A8F9C', fontSize: 14, textAlign: 'center', marginBottom: 10 },
   overlayAnalizando: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   resultCard: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.surface, padding: 30, borderTopLeftRadius: 20, borderTopRightRadius: 20, alignItems: 'center' },
 });

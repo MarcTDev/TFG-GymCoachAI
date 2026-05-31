@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useRouter, usePathname } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, Image, ActivityIndicator, Pressable } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome5";
@@ -11,14 +11,15 @@ import { supabase } from "../lib/supabase";
 export default function IndexScreen() {
   const { session, loading, setIsRegistering } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const { setData } = useRegistro();
   const [googleLoading, setGoogleLoading] = useState(false);
 
   useEffect(() => {
-    if (!loading && session) {
+    if (!loading && session && pathname === "/") {
       router.replace("/(tabs)/workout");
     }
-  }, [session, loading]);
+  }, [session, loading, pathname]);
 
   const handleGoogle = async () => {
     setIsRegistering(true);

@@ -277,7 +277,7 @@ export default function DietScreen() {
 
         {/* Acceso a la biblioteca de recetas */}
         <Pressable style={styles.btnBiblioteca} onPress={() => router.push("/receta/biblioteca")}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1, marginRight: 12 }}>
             <View style={styles.iconoBiblioteca}>
               <FontAwesome name="book-open" size={16} color={Colors.secondary} solid />
             </View>

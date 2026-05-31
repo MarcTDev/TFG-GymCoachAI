@@ -123,7 +123,15 @@ export async function loginConGoogle() {
     return { error: new Error('Cancelado') };
   }
 
-  const resSession = await supabase.auth.exchangeCodeForSession(result.url);
+  let code = '';
+  if (result.url) {
+    const codeParam = result.url.match(/code=([^&#]+)/);
+    if (codeParam) {
+      code = codeParam[1];
+    }
+  }
+
+  const resSession = await supabase.auth.exchangeCodeForSession(code || result.url);
 
   let usr = null;
   if (resSession.data && resSession.data.user) {
