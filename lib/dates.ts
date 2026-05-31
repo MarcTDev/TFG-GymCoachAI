@@ -3,22 +3,15 @@ export const localDate = (offsetDays = 0): string => {
   d.setDate(d.getDate() + offsetDays);
   
   const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
   
-  let month = String(d.getMonth() + 1);
-  if (month.length === 1) month = '0' + month;
-  
-  let day = String(d.getDate());
-  if (day.length === 1) day = '0' + day;
-  
-  return year + "-" + month + "-" + day;
+  return `${year}-${month}-${day}`;
 };
 
 export const getDayOfWeek = (): number => {
   const d = new Date().getDay();
-  if (d === 0) {
-    return 7;
-  }
-  return d;
+  return d === 0 ? 7 : d;
 };
 
 export const getWeekDate = (diaSemana: number): string => {

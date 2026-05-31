@@ -77,10 +77,7 @@ export default function RegistroStep1() {
     kbBehavior = "padding" as const;
   }
   
-  let statusStyle = "dark-content" as const;
-  if (colorScheme === "dark") {
-    statusStyle = "light-content" as const;
-  }
+  const statusStyle = colorScheme === "dark" ? "light-content" : "dark-content";
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={kbBehavior}>

@@ -31,19 +31,7 @@ const buildPerfil = (userId: string, p: PerfilInput) => {
     alturaNum = parseFloat(p.altura);
   }
 
-  let obj = null;
-  if (p.objetivo) {
-    let str = p.objetivo;
-    let newStr = "";
-    for (let i = 0; i < str.length; i++) {
-      if (str[i] === "_") {
-        newStr += " ";
-      } else {
-        newStr += str[i];
-      }
-    }
-    obj = newStr;
-  }
+  const obj = p.objetivo ? p.objetivo.replace(/_/g, ' ') : null;
 
   return {
     usuario_id: userId,

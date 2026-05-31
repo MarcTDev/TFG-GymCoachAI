@@ -76,14 +76,9 @@ async function callOpenAICompatible(url: string, apiKey: string, model: string, 
   const data = await response.json()
   const content = data.choices[0].message.content
 
-  let textoRespuesta = ''
-  if (Array.isArray(content)) {
-    textoRespuesta = content.map(bloque => bloque.text ?? '').join('')
-  } else {
-    textoRespuesta = String(content ?? '')
-  }
+  const textoRespuesta = String(content ?? '').trim()
 
-  if (textoRespuesta.trim() === '') {
+  if (textoRespuesta === '') {
     throw new Error(`Respuesta vacía de ${url}`)
   }
 
@@ -212,6 +207,29 @@ function getFechasSemana(): { inicio: string; fin: string } {
   return { inicio, fin }
 }
 
+// Convierte dia_semana a número si la IA devolvió una cadena como "Lunes"
+function normalizarDiaSemana(dia: any): number {
+  if (typeof dia === 'number') {
+    return dia
+  }
+  
+  const diasMap: Record<string, number> = {
+    'lunes': 1, 'martes': 2, 'miércoles': 3, 'miercoles': 3, 'jueves': 4, 'viernes': 5, 'sábado': 6, 'sabado': 6, 'domingo': 7,
+    'monday': 1, 'tuesday': 2, 'wednesday': 3, 'thursday': 4, 'friday': 5, 'saturday': 6, 'sunday': 7,
+    '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7
+  }
+  
+  const normalized = String(dia ?? '').toLowerCase().trim()
+  return diasMap[normalized] ?? 1 // Valor predeterminado en caso de no coincidir
+}
+
+// Obtiene los días de la semana específicos que el usuario quiere entrenar a partir de info_adicional
+function obtenerDiasEntrenamiento(infoAdicional: string): string[] {
+  const match = infoAdicional.match(/Días:\s*([^.]+)/i)
+  if (!match) return []
+  return match[1].split(',').map(d => d.trim()).filter(Boolean)
+}
+
 // ===== ARCHIVAR DATOS EN EL HISTORIAL =====
 
 // Mueve los planes de la semana pasada al historial y borra sus registros locales
@@ -243,7 +261,7 @@ async function archivarSemanaAnterior(supabase: any, usuarioId: string): Promise
         .eq('id_rutina_semana', rutinaPasada.id)
         .eq('es_descanso', false)
 
-      const grupos = dias?.map((d: any) => d.descripcion).filter(Boolean).join(', ') ?? ''
+      const grupos = dias ? dias.map((d: any) => d.descripcion).filter(Boolean).join(', ') : "";
 
       const { data: statsEj } = await supabase
         .from('registro_ejercicio')
@@ -254,11 +272,7 @@ async function archivarSemanaAnterior(supabase: any, usuarioId: string): Promise
 
       const totalEj = statsEj?.length ?? 0
       const completadosEj = statsEj?.filter((e: any) => e.completado).length ?? 0
-      
-      let adherenciaEj = 0
-      if (totalEj > 0) {
-        adherenciaEj = Math.round((completadosEj / totalEj) * 100)
-      }
+      const adherenciaEj = totalEj > 0 ? Math.round((completadosEj / totalEj) * 100) : 0;
 
       const { data: extrasEj } = await supabase
         .from('registro_ejercicio_extra')
@@ -275,13 +289,13 @@ async function archivarSemanaAnterior(supabase: any, usuarioId: string): Promise
         .lte('fecha', rutinaPasada.fecha_fin)
         .not('valoracion_entreno', 'is', null)
 
-      const valoracionMediaEj = diasValoracionEj?.length > 0
-        ? Math.round(diasValoracionEj.reduce((sum: number, d: any) => sum + d.valoracion_entreno, 0) / diasValoracionEj.length)
-        : null
+      const valoracionMediaEj = (diasValoracionEj && diasValoracionEj.length > 0)
+        ? Math.round(diasValoracionEj.reduce((acc: number, d: any) => acc + d.valoracion_entreno, 0) / diasValoracionEj.length)
+        : null;
 
-      const feedbackExtrasEj = extrasEj?.length > 0
-        ? `Ejercicios extra: ${extrasEj.map((e: any) => e.nombre).join(', ')}`
-        : null
+      const feedbackExtrasEj = (extrasEj && extrasEj.length > 0)
+        ? `Ejercicios extra: ${extrasEj.map((e: any) => e.nombre).filter(Boolean).join(', ')}`
+        : null;
 
       await supabase.from('historial_rutina').insert({
         usuario_id: usuarioId,
@@ -339,11 +353,7 @@ async function archivarSemanaAnterior(supabase: any, usuarioId: string): Promise
 
       const totalComidas = statsComida?.length ?? 0
       const completadasComidas = statsComida?.filter((c: any) => c.completada).length ?? 0
-      
-      let adherenciaDieta = 0
-      if (totalComidas > 0) {
-        adherenciaDieta = Math.round((completadasComidas / totalComidas) * 100)
-      }
+      const adherenciaDieta = totalComidas > 0 ? Math.round((completadasComidas / totalComidas) * 100) : 0;
 
       const { data: extrasComida } = await supabase
         .from('registro_comida_extra')
@@ -352,7 +362,7 @@ async function archivarSemanaAnterior(supabase: any, usuarioId: string): Promise
         .gte('fecha', dietaPasada.fecha_inicio)
         .lte('fecha', dietaPasada.fecha_fin)
 
-      const kcalExtras = extrasComida?.reduce((sum: number, c: any) => sum + (c.kcal ?? 0), 0) ?? 0
+      const kcalExtras = extrasComida?.reduce((acc: number, c: any) => acc + (c.kcal ?? 0), 0) ?? 0;
 
       const { data: diasValoracionDieta } = await supabase
         .from('registro_dia')
@@ -362,13 +372,11 @@ async function archivarSemanaAnterior(supabase: any, usuarioId: string): Promise
         .lte('fecha', dietaPasada.fecha_fin)
         .not('valoracion_dieta', 'is', null)
 
-      const valoracionMediaDieta = diasValoracionDieta?.length > 0
-        ? Math.round(diasValoracionDieta.reduce((sum: number, d: any) => sum + d.valoracion_dieta, 0) / diasValoracionDieta.length)
-        : null
+      const valoracionMediaDieta = (diasValoracionDieta && diasValoracionDieta.length > 0)
+        ? Math.round(diasValoracionDieta.reduce((acc: number, d: any) => acc + d.valoracion_dieta, 0) / diasValoracionDieta.length)
+        : null;
 
-      const feedbackExtrasComida = kcalExtras > 0
-        ? `Kcal extra semana: ${kcalExtras}`
-        : null
+      const feedbackExtrasComida = kcalExtras > 0 ? `Kcal extra semana: ${kcalExtras}` : null;
 
       await supabase.from('historial_dieta').insert({
         usuario_id: usuarioId,
@@ -428,21 +436,51 @@ async function generarRutina(
       ).join('\n')
     : 'Primera semana del usuario'
 
-  const systemPrompt = `Eres un generador de rutinas de entrenamiento.
+  const diasSeleccionados = obtenerDiasEntrenamiento(perfil.info_adicional || '')
+  let diasInstruccion = ''
+  if (diasSeleccionados.length > 0) {
+    diasInstruccion = `El usuario ha seleccionado entrenar EXACTAMENTE los siguientes días de la semana: ${diasSeleccionados.join(', ')}.
+Por lo tanto, en el JSON que generes:
+- Los días que correspondan a estos días (${diasSeleccionados.join(', ')}) DEBEN tener "es_descanso": false y contener una sesión de entrenamiento activa con ejercicios.
+- Los demás días de la semana DEBEN tener "es_descanso": true y "ejercicios": [].`
+  } else {
+    diasInstruccion = `El usuario no ha especificado días concretos de entrenamiento. Genera un plan equilibrado de 4 o 5 días de entrenamiento (por ejemplo Lunes, Martes, Jueves, Viernes) y 2 o 3 días de descanso (Miércoles, Sábado, Domingo) con ejercicios=[].`
+  }
+
+  const systemPrompt = `Eres un generador de rutinas de entrenamiento personalizadas y profesionales.
 Devuelve ÚNICAMENTE JSON válido sin texto adicional ni markdown.
-Sé muy conciso en textos, máximo 6 palabras por campo.`
+El campo "dia_semana" DEBE ser obligatoriamente un número entero del 1 al 7 (donde 1 es Lunes, 2 es Martes, ..., 7 es Domingo). NUNCA devuelvas una cadena como "Lunes" o "Martes".
+Sé muy conciso en textos de descripción, máximo 6 palabras por campo.`
 
   const userPrompt = `
-PERFIL: ${perfil.nombre}, ${perfil.edad}a, ${perfil.peso_actual}kg, objetivo: ${perfil.objetivo}, nivel: ${perfil.nivel_actividad}
-RESTRICCIONES: ${perfil.info_adicional || 'ninguna'}
-${feedback ? `FEEDBACK USUARIO: ${feedback}` : ''}
-HISTORIAL: ${historialTexto}
+PERFIL DEL USUARIO:
+- Nombre: ${perfil.nombre}
+- Edad: ${perfil.edad} años
+- Peso actual: ${perfil.peso_actual} kg
+- Objetivo principal: ${perfil.objetivo}
+- Nivel de actividad física: ${perfil.nivel_actividad}
 
-EJERCICIOS (id|nombre|grupo|dificultad):
+INFORMACIÓN ADICIONAL / PREFERENCIAS (Equipamiento, días, duración, limitaciones físicas):
+${perfil.info_adicional || 'Ninguna especificada'}
+
+${feedback ? `FEEDBACK PERSONALIZADO DEL USUARIO: ${feedback}` : ''}
+
+HISTORIAL DE ENTRENAMIENTOS ANTERIORES:
+${historialTexto}
+
+INSTRUCCIONES DE INTENSIDAD Y OBJETIVO:
+- El plan debe ser INTENSO, exigente y efectivo, adaptado para dar el máximo rendimiento según el nivel de actividad del usuario ("${perfil.nivel_actividad}").
+- Si el objetivo principal es "ganar masa muscular" (hipertrofia): Prioriza ejercicios con pesos libres (mancuernas, barra), series de 3 a 4 y rangos de repeticiones de 8 a 12 buscando la cercanía al fallo muscular. Descansos de 90s.
+- Si el objetivo es "perder peso", "definicion" o "tonificar": Aumenta la intensidad metabólica, incorporando repeticiones más altas (12 a 15), descansos de 60s, circuitos exigentes o ejercicios compuestos de alto gasto calórico.
+- Respeta estrictamente cualquier limitación física descrita en la información adicional (por ejemplo, si el usuario tiene dolor de rodilla, evita sentadillas pesadas o impactos directos, proponiendo alternativas seguras).
+
+DÍAS DE ENTRENAMIENTO EXIGIDOS:
+${diasInstruccion}
+
+EJERCICIOS DISPONIBLES (Usa SOLO los IDs del listado para "id_ejercicio" en las sesiones):
 ${ejerciciosTexto}
 
-Genera 7 días de entrenamiento. Usa SOLO los IDs del listado.
-Incluye 2 días de descanso. Para días de descanso, ejercicios=[].
+Genera el plan de 7 días exactos.
 
 JSON exacto:
 {
@@ -508,7 +546,7 @@ JSON exacto:
       .from('rutina_dia')
       .insert({
         id_rutina_semana: rutinaSemana.id,
-        dia_semana: dia.dia_semana,
+        dia_semana: normalizarDiaSemana(dia.dia_semana),
         es_descanso: dia.es_descanso,
         nombre_sesion: dia.nombre_sesion || null,
         descripcion: dia.descripcion || null,
@@ -521,20 +559,16 @@ JSON exacto:
     }
 
     if (dia.es_descanso === false && dia.ejercicios?.length > 0) {
-      const ejerciciosInsertar = []
-      
-      for (const e of dia.ejercicios) {
-        ejerciciosInsertar.push({
-          id_rutina_dia: rutinaDia.id,
-          id_ejercicio: e.id_ejercicio,
-          orden: e.orden,
-          series: e.series || null,
-          repeticiones: e.repeticiones || null,
-          duracion_seg: e.duracion_seg || null,
-          descanso_seg: e.descanso_seg || null,
-          notas: e.notas || null,
-        })
-      }
+      const ejerciciosInsertar = dia.ejercicios.map((e: any) => ({
+        id_rutina_dia: rutinaDia.id,
+        id_ejercicio: e.id_ejercicio,
+        orden: e.orden,
+        series: e.series || null,
+        repeticiones: e.repeticiones || null,
+        duracion_seg: e.duracion_seg || null,
+        descanso_seg: e.descanso_seg || null,
+        notas: e.notas || null,
+      }))
 
       const { error: errorRE } = await supabase
         .from('rutina_ejercicio')
@@ -572,22 +606,38 @@ async function generarDieta(
       ).join('\n')
     : 'Primera semana del usuario'
 
-  const systemPrompt = `Eres un generador de planes de nutrición personalizados.
+  const systemPrompt = `Eres un generador de planes de nutrición personalizados, intensos y profesionales.
 Devuelve ÚNICAMENTE JSON válido sin texto adicional ni markdown.
-Sé muy conciso en textos, máximo 6 palabras por campo.`
+El campo "dia_semana" DEBE ser obligatoriamente un número entero del 1 al 7 (donde 1 es Lunes, 2 es Martes, ..., 7 es Domingo). NUNCA devuelvas una cadena como "Lunes" o "Martes".
+Sé muy conciso en textos de descripción, máximo 6 palabras por campo.`
 
   const userPrompt = `
-PERFIL: ${perfil.nombre}, ${perfil.edad}a, ${perfil.peso_actual}kg, objetivo: ${perfil.objetivo}
-RESTRICCIONES/ALERGIAS: ${perfil.info_adicional || 'ninguna'}
-${feedback ? `FEEDBACK USUARIO: ${feedback}` : ''}
-HISTORIAL: ${historialTexto}
+PERFIL DEL USUARIO:
+- Nombre: ${perfil.nombre}
+- Edad: ${perfil.edad} años
+- Peso actual: ${perfil.peso_actual} kg
+- Objetivo principal: ${perfil.objetivo}
 
-RECETAS (id|nombre|kcal|tipo|macros|alergenos):
+INFORMACIÓN ADICIONAL / PREFERENCIAS / RESTRICCIONES (Alergias, limitaciones, gustos):
+${perfil.info_adicional || 'Ninguna especificada'}
+
+${feedback ? `FEEDBACK PERSONALIZADO DEL USUARIO: ${feedback}` : ''}
+
+HISTORIAL DE DIETAS ANTERIORES:
+${historialTexto}
+
+INSTRUCCIONES DE NUTRICIÓN Y OBJETIVO:
+- El plan debe ser INTENSO y perfectamente adaptado a su objetivo principal ("${perfil.objetivo}").
+- Las calorías diarias totales del plan ("calorias_dia") deben ser efectivas y calculadas con precisión:
+  - Si el objetivo principal es "ganar masa muscular" (hipertrofia): Genera un superávit calórico controlado (por ejemplo, calcula peso_actual * 35 a 40 kcal). Las comidas deben ser densas en macronutrientes y con alto contenido proteico.
+  - Si el objetivo principal es "perder peso", "definicion" o "tonificar": Genera un déficit calórico eficiente e intenso (por ejemplo, calcula peso_actual * 23 a 27 kcal). Prioriza recetas de alto poder saciante, ricas en volumen (verduras/fibra) y proteínas para retener masa muscular.
+- Respeta estrictamente cualquier alergia o restricción física o alimentaria descrita en la información adicional.
+- Asegura una distribución lógica de macronutrientes (Proteínas, Carbohidratos y Grasas) en cada comida.
+
+RECETAS DISPONIBLES EN CATÁLOGO (Usa SOLO los IDs del listado para "id_receta" en las comidas):
 ${recipesTexto}
 
-Genera plan de dieta para 7 días. Usa SOLO los IDs del listado.
-Respeta alergias. Ajusta calorías al objetivo.
-Incluye desayuno, almuerzo, cena y snack cada día.
+Genera un plan de dieta estructurado para los 7 días. Cada día debe incluir obligatoriamente desayuno, almuerzo, cena y snack.
 IMPORTANTE: Cada día debe tener recetas DIFERENTES. No repitas el mismo id_receta en más de 2 días distintos. Varía al máximo las comidas entre días.
 
 JSON exacto:
@@ -650,7 +700,7 @@ JSON exacto:
       .from('dieta_dia')
       .insert({
         id_dieta_semana: dietaSemana.id,
-        dia_semana: dia.dia_semana,
+        dia_semana: normalizarDiaSemana(dia.dia_semana),
         calorias_dia: dia.calorias_dia,
         descripcion: dia.descripcion || null,
       })
@@ -662,18 +712,14 @@ JSON exacto:
     }
 
     if (dia.comidas?.length > 0) {
-      const comidasInsertar = []
-      
-      for (const c of dia.comidas) {
-        comidasInsertar.push({
-          id_dieta_dia: dietaDia.id,
-          id_receta: c.id_receta,
-          tipo_comida: c.tipo_comida,
-          orden: c.orden,
-          cantidad_g: c.cantidad_g || null,
-          notas: c.notas || null,
-        })
-      }
+      const comidasInsertar = dia.comidas.map((c: any) => ({
+        id_dieta_dia: dietaDia.id,
+        id_receta: c.id_receta,
+        tipo_comida: c.tipo_comida,
+        orden: c.orden,
+        cantidad_g: c.cantidad_g || null,
+        notas: c.notas || null,
+      }))
 
       const { error: errorDC } = await supabase
         .from('dieta_comida')

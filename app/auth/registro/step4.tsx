@@ -27,11 +27,7 @@ export default function RegistroStep4() {
   const [errorModal, setErrorModal] = useState({ visible: false, title: "", message: "" });
   const [onboardingVisible, setOnboardingVisible] = useState(false);
 
-  let inicialEmail = "";
-  if (contextData.email) inicialEmail = contextData.email;
-  
-  let inicialInfo = "";
-  if (contextData.infoAdicional) inicialInfo = contextData.infoAdicional;
+  const { email: inicialEmail = "", infoAdicional: inicialInfo = "" } = contextData;
 
   const [email, setEmail] = useState(inicialEmail);
   const [password, setPassword] = useState("");
@@ -92,10 +88,7 @@ export default function RegistroStep4() {
 
     } catch (error: any) {
       setIsRegistering(false);
-      let msg = "Inténtalo de nuevo.";
-      if (error && error.message) {
-        msg = error.message;
-      }
+      const msg = error?.message || "Inténtalo de nuevo.";
       setErrorModal({ visible: true, title: "Error al registrarse", message: msg });
     } finally {
       setLoading(false);
@@ -107,10 +100,7 @@ export default function RegistroStep4() {
     kbBehavior = "padding" as const;
   }
   
-  let statusStyle = "dark-content" as const;
-  if (colorScheme === "dark") {
-    statusStyle = "light-content" as const;
-  }
+  const statusStyle = colorScheme === "dark" ? "light-content" : "dark-content";
   
   let btnText = "Finalizar";
   if (loading) {

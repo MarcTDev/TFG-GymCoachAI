@@ -29,7 +29,18 @@ export default function AuthCallback() {
         const perfil = resPerfil.data;
 
         if (perfil) {
-          router.replace('/(tabs)/workout' as any);
+          try {
+            const { data: rutina } = await supabase.from("rutina_semana").select("id").eq("usuario_id", user.id).limit(1);
+            const { data: dieta } = await supabase.from("dieta_semana").select("id").eq("usuario_id", user.id).limit(1);
+            
+            if (!rutina || rutina.length === 0 || !dieta || dieta.length === 0) {
+              router.replace('/auth/generating' as any);
+            } else {
+              router.replace('/(tabs)/workout' as any);
+            }
+          } catch (err) {
+            router.replace('/(tabs)/workout' as any);
+          }
         } else {
           let nombreGoogle = "";
           if (user.user_metadata && user.user_metadata.full_name) {

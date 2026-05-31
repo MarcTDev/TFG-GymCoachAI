@@ -22,16 +22,16 @@ export const getSystemPrompt = async (userId?: string): Promise<{ prompt: string
     const { data: p } = await supabase.from('perfil').select('*').eq('usuario_id', userId).single();
     if (p) {
       if (p.nombre) nombre = p.nombre;
-      
+
       let nombreContext = "No especificado";
       if (p.nombre) nombreContext = p.nombre;
-      
+
       let edadContext = "No especificada";
       if (p.edad) edadContext = String(p.edad);
-      
+
       let pesoContext = "No especificado";
       if (p.peso_actual) pesoContext = p.peso_actual + " kg";
-      
+
       let objContext = "No especificado";
       if (p.objetivo) objContext = p.objetivo;
 
@@ -68,7 +68,7 @@ const callApi = async (
   url: string, apiKey: string, model: string,
   messages: ChatMessage[], systemPrompt: string
 ): Promise<string> => {
-  
+
   const mensajesArray = [
     { role: 'system', content: systemPrompt },
     ...messages
@@ -91,7 +91,7 @@ const callApi = async (
 
   const data = await res.json();
   const content = data.choices[0].message.content;
-  
+
   let text = "";
   if (Array.isArray(content)) {
     for (const item of content) {
@@ -106,7 +106,7 @@ const callApi = async (
   if (!text.trim()) {
     throw new Error(`Respuesta vacía de ${url}`);
   }
-  
+
   return text;
 };
 
@@ -116,17 +116,17 @@ export const sendMessage = async (messages: ChatMessage[], systemPrompt: string)
   const groqKey2 = process.env.EXPO_PUBLIC_GROQ_API_KEY_2 ?? '';
   const cohereKey = process.env.EXPO_PUBLIC_COHERE_API_KEY ?? '';
 
-  try { 
-    return await callApi(CEREBRAS_URL, cerebrasKey, 'qwen-3-235b-a22b-instruct-2507', messages, systemPrompt); 
-  } catch (e) {}
-  
-  try { 
-    return await callApi(GROQ_URL, groqKey1, 'llama-3.3-70b-versatile', messages, systemPrompt); 
-  } catch (e) {}
-  
-  try { 
-    return await callApi(GROQ_URL, groqKey2, 'llama-3.3-70b-versatile', messages, systemPrompt); 
-  } catch (e) {}
-  
+  try {
+    return await callApi(CEREBRAS_URL, cerebrasKey, 'qwen-3-235b-a22b-instruct-2507', messages, systemPrompt);
+  } catch (e) { }
+
+  try {
+    return await callApi(GROQ_URL, groqKey1, 'llama-3.3-70b-versatile', messages, systemPrompt);
+  } catch (e) { }
+
+  try {
+    return await callApi(GROQ_URL, groqKey2, 'llama-3.3-70b-versatile', messages, systemPrompt);
+  } catch (e) { }
+
   return await callApi(COHERE_URL, cohereKey, 'command-a-03-2025', messages, systemPrompt);
 };

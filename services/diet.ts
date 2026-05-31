@@ -14,17 +14,11 @@ export async function cargarDieta(userId: string, fechaHoy: string) {
   const resExtra = await supabase.from("registro_comida_extra").select("*").eq("usuario_id", userId).eq("fecha", fechaHoy);
   const resAgua = await supabase.from("registro_dia").select("vasos_agua").eq("usuario_id", userId).eq("fecha", fechaHoy).maybeSingle();
 
-  let dias = [];
-  if (resDieta.data && resDieta.data.dieta_dia) dias = resDieta.data.dieta_dia;
+  const dias: any[] = resDieta.data?.dieta_dia ?? [];
 
-  let registros = [];
-  if (resReg.data) registros = resReg.data;
-
-  let extras = [];
-  if (resExtra.data) extras = resExtra.data;
-
-  let agua = 0;
-  if (resAgua.data && resAgua.data.vasos_agua) agua = resAgua.data.vasos_agua;
+  const registros = resReg.data ?? [];
+  const extras = resExtra.data ?? [];
+  const agua = resAgua.data?.vasos_agua ?? 0;
 
   return {
     diasSemana: dias,
@@ -54,20 +48,9 @@ export async function marcarComida(
   accion: "completada" | "saltada",
   fechaHoy: string
 ) {
-  let isComp = false;
-  if (accion === "completada") isComp = true;
-
-  let isSalt = false;
-  if (accion === "saltada") isSalt = true;
-
-  let kcal = null;
-  if (isComp) {
-    if (comida.receta_catalogo && comida.receta_catalogo.kcal) {
-      kcal = comida.receta_catalogo.kcal;
-    } else {
-      kcal = 0;
-    }
-  }
+  const isComp = accion === "completada";
+  const isSalt = accion === "saltada";
+  const kcal = isComp ? (comida.receta_catalogo?.kcal ?? 0) : null;
 
   const { data, error } = await supabase
     .from("registro_comida")
@@ -115,24 +98,22 @@ export function sumarMacros(comidas: any[], registros: Record<string, any>, extr
   let carb = 0;
   let grasa = 0;
 
-  for (let i = 0; i < comidas.length; i++) {
-    const c = comidas[i];
+  for (const c of comidas) {
     const reg = registros[c.id];
     const r = c.receta_catalogo;
-    if (reg && reg.completada && r) {
-      if (r.kcal) kcal = kcal + r.kcal;
-      if (r.proteinas_g) prot = prot + Number(r.proteinas_g);
-      if (r.carbos_g) carb = carb + Number(r.carbos_g);
-      if (r.grasas_g) grasa = grasa + Number(r.grasas_g);
+    if (reg?.completada && r) {
+      kcal += r.kcal ?? 0;
+      prot += Number(r.proteinas_g ?? 0);
+      carb += Number(r.carbos_g ?? 0);
+      grasa += Number(r.grasas_g ?? 0);
     }
   }
 
-  for (let i = 0; i < extras.length; i++) {
-    const e = extras[i];
-    if (e.kcal) kcal = kcal + e.kcal;
-    if (e.proteinas_g) prot = prot + Number(e.proteinas_g);
-    if (e.carbos_g) carb = carb + Number(e.carbos_g);
-    if (e.grasas_g) grasa = grasa + Number(e.grasas_g);
+  for (const e of extras) {
+    kcal += e.kcal ?? 0;
+    prot += Number(e.proteinas_g ?? 0);
+    carb += Number(e.carbos_g ?? 0);
+    grasa += Number(e.grasas_g ?? 0);
   }
 
   return { kcal, prot, carb, grasa };

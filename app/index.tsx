@@ -15,9 +15,24 @@ export default function IndexScreen() {
   const { setData } = useRegistro();
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  const checkRedirect = async (userId: string) => {
+    try {
+      const { data: rutina } = await supabase.from("rutina_semana").select("id").eq("usuario_id", userId).limit(1);
+      const { data: dieta } = await supabase.from("dieta_semana").select("id").eq("usuario_id", userId).limit(1);
+      
+      if (!rutina?.length || !dieta?.length) {
+        router.replace("/auth/generating");
+      } else {
+        router.replace("/(tabs)/workout");
+      }
+    } catch (err) {
+      router.replace("/(tabs)/workout");
+    }
+  };
+
   useEffect(() => {
     if (!loading && session && pathname === "/") {
-      router.replace("/(tabs)/workout");
+      checkRedirect(session.user.id);
     }
   }, [session, loading, pathname]);
 
@@ -36,7 +51,7 @@ export default function IndexScreen() {
 
     if (perfil) {
       setIsRegistering(false);
-      router.replace("/(tabs)/workout");
+      await checkRedirect(user.id);
     } else {
       let nombreGoogle = "";
       let apellidosGoogle = "";

@@ -58,19 +58,17 @@ const llamarGemini = async (base64: string, prompt: string): Promise<string> => 
   }
   
   const json = await res.json();
-  if (json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts && json.candidates[0].content.parts[0]) {
-    return json.candidates[0].content.parts[0].text ?? '';
-  }
-  return '';
+  return json.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 };
 
 const llamarGroq = async (base64: string, prompt: string): Promise<string> => {
   let key = process.env.EXPO_PUBLIC_GROQ_API_KEY;
   if (!key) key = '';
 
-  let contentArray = [];
-  contentArray.push({ type: 'text', text: prompt });
-  contentArray.push({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + base64 } });
+  const contentArray = [
+    { type: 'text', text: prompt },
+    { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64}` } }
+  ];
 
   const res = await fetch(GROQ_URL, {
     method: 'POST',
@@ -97,9 +95,10 @@ const llamarCohere = async (base64: string, prompt: string): Promise<string> => 
   let key = process.env.EXPO_PUBLIC_COHERE_API_KEY;
   if (!key) key = '';
 
-  let contentArray = [];
-  contentArray.push({ type: 'text', text: prompt });
-  contentArray.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } });
+  const contentArray = [
+    { type: 'text', text: prompt },
+    { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } }
+  ];
 
   const res = await fetch(COHERE_URL, {
     method: 'POST',
@@ -156,13 +155,10 @@ export const analyzeFridge = async (imageUri: string): Promise<FridgeResult> => 
   const texto = await analizarConFallback(base64, PROMPT_FRIDGE);
   const r = JSON.parse(limpiarJSON(texto));
   
-  let ing = [];
-  if (Array.isArray(r.ingredients)) ing = r.ingredients;
-  
-  let conf = [];
-  if (Array.isArray(r.confidence)) conf = r.confidence;
-
-  return { ingredients: ing, confidence: conf };
+  return {
+    ingredients: Array.isArray(r.ingredients) ? r.ingredients : [],
+    confidence: Array.isArray(r.confidence) ? r.confidence : []
+  };
 };
 
 export const generarRecetaIA = async (perfil: any, ingredientes: string[], userId?: string): Promise<any> => {

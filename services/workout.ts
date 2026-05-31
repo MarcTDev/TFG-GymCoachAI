@@ -46,12 +46,8 @@ export async function cargarKcalQuemadasHoy(userId: string) {
 }
 
 export function estimarKcalEjercicio(series?: number | null, repeticiones?: number | null): number {
-  let s = 0;
-  if (series) s = series;
-  
-  let r = 0;
-  if (repeticiones) r = repeticiones;
-  
+  const s = series ?? 0;
+  const r = repeticiones ?? 0;
   return Math.round(s * r * 0.5);
 }
 
@@ -102,11 +98,8 @@ export async function completarEjercicio(params: {
   const hoy = localDate(0);
   const kcal = estimarKcalEjercicio(params.series, params.repeticiones);
   
-  let ser = null;
-  if (params.series) ser = params.series;
-  
-  let rep = null;
-  if (params.repeticiones) rep = params.repeticiones;
+  const ser = params.series ?? null;
+  const rep = params.repeticiones ?? null;
 
   const res = await supabase
     .from('registro_ejercicio')
@@ -195,14 +188,9 @@ export async function anadirActividadExtra(params: {
   const hoy = localDate(0);
   const kcal = estimarKcalEjercicio(params.series, params.repeticiones);
   
-  let ejId = null;
-  if (params.ejercicioId) ejId = params.ejercicioId;
-  
-  let ser = null;
-  if (params.series) ser = params.series;
-  
-  let rep = null;
-  if (params.repeticiones) rep = params.repeticiones;
+  const ejId = params.ejercicioId ?? null;
+  const ser = params.series ?? null;
+  const rep = params.repeticiones ?? null;
 
   const res = await supabase
     .from('registro_ejercicio_extra')

@@ -36,11 +36,7 @@ export default function RegistroStep3() {
   const { data: ctx, resetData } = useRegistro();
   const { setIsRegistering } = useAuth();
 
-  let inicialObjetivo = "";
-  if (ctx.objetivo) inicialObjetivo = ctx.objetivo;
-  
-  let inicialActividad = "";
-  if (ctx.actividad) inicialActividad = ctx.actividad;
+  const { objetivo: inicialObjetivo = "", actividad: inicialActividad = "" } = ctx;
 
   const [objetivo, setObjetivo] = useState(inicialObjetivo);
   const [actividad, setActividad] = useState(inicialActividad);
@@ -94,10 +90,7 @@ export default function RegistroStep3() {
       router.replace("/auth/generating" as any);
       resetData();
     } catch (error: any) {
-      let msg = "";
-      if (error && error.message) {
-        msg = error.message;
-      }
+      const msg = error?.message || "";
       alert("Error al guardar el perfil: " + msg);
     } finally {
       setLoading(false);
@@ -110,10 +103,7 @@ export default function RegistroStep3() {
     kbBehavior = "padding" as const;
   }
   
-  let statusStyle = "dark-content" as const;
-  if (colorScheme === "dark") {
-    statusStyle = "light-content" as const;
-  }
+  const statusStyle = colorScheme === "dark" ? "light-content" : "dark-content";
 
   let btnText = "Siguiente";
   if (ctx.viaGoogle) {

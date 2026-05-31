@@ -4,13 +4,8 @@ import { localDate } from "../lib/dates";
 const DIAS_L = ["L", "M", "X", "J", "V", "S", "D"];
 function dayLabel(fecha: string) {
   const d = new Date(fecha + "T12:00:00");
-  let num = d.getDay();
-  if (num === 0) {
-    num = 6;
-  } else {
-    num = num - 1;
-  }
-  return DIAS_L[num];
+  const num = d.getDay();
+  return DIAS_L[num === 0 ? 6 : num - 1];
 }
 
 export async function cargarStats(userId: string) {
@@ -42,10 +37,7 @@ export async function cargarStats(userId: string) {
   const resDieta = await p9;
   const resRacha = await p10;
 
-  let dDias = [];
-  if (resDieta.data && resDieta.data.dieta_dia) {
-    dDias = resDieta.data.dieta_dia;
-  }
+  const dDias = resDieta.data?.dieta_dia ?? [];
 
   return {
     pesos: resPesos.data ?? [],
@@ -70,106 +62,64 @@ export function calcularDiasEntrenadosSemana(regDia: any[]) {
     lunes.setDate(d.getDate() - offset);
     const key = lunes.toISOString().split("T")[0];
     
-    if (!semMap[key]) {
-      semMap[key] = 0;
-    }
-    semMap[key] = semMap[key] + 1;
+    semMap[key] = (semMap[key] ?? 0) + 1;
   }
   
-  let keys = Object.keys(semMap);
-  keys.sort();
+  const keys = Object.keys(semMap).sort();
+  const start = Math.max(0, keys.length - 8);
   
-  let start = keys.length - 8;
-  if (start < 0) start = 0;
-  
-  let result = [];
+  const result = [];
   for (let i = start; i < keys.length; i++) {
-    result.push({ label: "S" + (result.length + 1), value: semMap[keys[i]] });
+    result.push({ label: `S${result.length + 1}`, value: semMap[keys[i]] });
   }
   return result;
 }
 
 export function calcularKcalEjercicio14d(regEj: any[], regEjExtra: any[]) {
-  const kcalMap: any = {};
+  const kcalMap: Record<string, number> = {};
+  const todos = [...regEj, ...regEjExtra];
   
-  let todos = [];
-  for (let i = 0; i < regEj.length; i++) todos.push(regEj[i]);
-  for (let i = 0; i < regEjExtra.length; i++) todos.push(regEjExtra[i]);
-  
-  for (let i = 0; i < todos.length; i++) {
-    const r = todos[i];
-    if (!kcalMap[r.fecha]) kcalMap[r.fecha] = 0;
-    
-    let kcal = 0;
-    if (r.kcal_estimadas) kcal = r.kcal_estimadas;
-    
-    kcalMap[r.fecha] = kcalMap[r.fecha] + kcal;
+  for (const r of todos) {
+    kcalMap[r.fecha] = (kcalMap[r.fecha] ?? 0) + (r.kcal_estimadas ?? 0);
   }
   
-  let result = [];
+  const result = [];
   for (let i = 0; i < 14; i++) {
     const f = localDate(-13 + i);
-    let lbl = "";
-    if (i % 3 === 0) {
-      lbl = f.slice(5);
-    }
-    
-    let v = 0;
-    if (kcalMap[f]) v = Math.round(kcalMap[f]);
-    
+    const lbl = i % 3 === 0 ? f.slice(5) : "";
+    const v = kcalMap[f] ? Math.round(kcalMap[f]) : 0;
     result.push({ label: lbl, value: v });
   }
   return result;
 }
 
 export function calcularAdherencia(adherenciaData: any[]) {
-  const arr = [...adherenciaData].reverse();
-  const result = [];
-  for (let i = 0; i < arr.length; i++) {
-    const r = arr[i];
-    let val = 0;
-    if (r.adherencia_pct) val = Math.round(r.adherencia_pct);
-    result.push({ label: "S" + (i + 1), value: val });
-  }
-  return result;
+  return [...adherenciaData].reverse().map((r, i) => ({
+    label: `S${i + 1}`,
+    value: r.adherencia_pct ? Math.round(r.adherencia_pct) : 0,
+  }));
 }
 
 export function calcularKcalDieta7d(regComida: any[], regComidaExtra: any[], dietaDias: any[]) {
-  const objetivoPorDiaSem: any = {};
-  for (let i = 0; i < dietaDias.length; i++) {
-    const d = dietaDias[i];
-    let cal = 2000;
-    if (d.calorias_dia) cal = d.calorias_dia;
-    objetivoPorDiaSem[d.dia_semana] = cal;
+  const objetivoPorDiaSem: Record<number, number> = {};
+  for (const d of dietaDias) {
+    objetivoPorDiaSem[d.dia_semana] = d.calorias_dia ?? 2000;
   }
   
-  const kcalPorFecha: any = {};
-  let todos = [];
-  for (let i = 0; i < regComida.length; i++) todos.push(regComida[i]);
-  for (let i = 0; i < regComidaExtra.length; i++) todos.push(regComidaExtra[i]);
-  
-  for (let i = 0; i < todos.length; i++) {
-    const r = todos[i];
-    if (!kcalPorFecha[r.fecha]) kcalPorFecha[r.fecha] = 0;
-    
-    let k = 0;
-    if (r.kcal) k = r.kcal;
-    
-    kcalPorFecha[r.fecha] = kcalPorFecha[r.fecha] + k;
+  const kcalPorFecha: Record<string, number> = {};
+  const todos = [...regComida, ...regComidaExtra];
+  for (const r of todos) {
+    kcalPorFecha[r.fecha] = (kcalPorFecha[r.fecha] ?? 0) + (r.kcal ?? 0);
   }
   
   const result = [];
   for (let i = 0; i < 7; i++) {
     const f = localDate(-6 + i);
-    const dObj = new Date(f + "T12:00:00");
-    let diaSem = dObj.getDay();
-    if (diaSem === 0) diaSem = 7;
+    const dObj = new Date(`${f}T12:00:00`);
+    const diaSem = dObj.getDay() === 0 ? 7 : dObj.getDay();
     
-    let cons = 0;
-    if (kcalPorFecha[f]) cons = Math.round(kcalPorFecha[f]);
-    
-    let obj = 2000;
-    if (objetivoPorDiaSem[diaSem]) obj = objetivoPorDiaSem[diaSem];
+    const cons = kcalPorFecha[f] ? Math.round(kcalPorFecha[f]) : 0;
+    const obj = objetivoPorDiaSem[diaSem] ?? 2000;
     
     result.push({ label: dayLabel(f), consumidas: cons, objetivo: obj });
   }
@@ -177,29 +127,21 @@ export function calcularKcalDieta7d(regComida: any[], regComidaExtra: any[], die
 }
 
 export function calcularAgua7d(regAgua: any[]) {
-  const aguaPorFecha: any = {};
-  for (let i = 0; i < regAgua.length; i++) {
-    const r = regAgua[i];
-    let v = 0;
-    if (r.vasos_agua) v = r.vasos_agua;
-    aguaPorFecha[r.fecha] = v;
+  const aguaPorFecha: Record<string, number> = {};
+  for (const r of regAgua) {
+    aguaPorFecha[r.fecha] = r.vasos_agua ?? 0;
   }
   
   const result = [];
   for (let i = 0; i < 7; i++) {
     const f = localDate(-6 + i);
-    let v = 0;
-    if (aguaPorFecha[f]) v = aguaPorFecha[f];
-    result.push({ label: dayLabel(f), value: v });
+    result.push({ label: dayLabel(f), value: aguaPorFecha[f] ?? 0 });
   }
   return result;
 }
 
 export function calcularRacha(rachaFechas: any[]) {
-  const activas = new Set();
-  for (let i = 0; i < rachaFechas.length; i++) {
-    activas.add(rachaFechas[i].fecha);
-  }
+  const activas = new Set(rachaFechas.map(r => r.fecha));
   
   let streak = 0;
   for (let i = 0; i < 60; i++) {

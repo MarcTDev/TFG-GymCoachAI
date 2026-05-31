@@ -7,6 +7,7 @@ import { Button } from "../../components/Button";
 import { Colors, ColorScheme } from "../../constants/Colors";
 import { useTheme } from "../../context/ThemeContext";
 import { login } from "../../services/auth";
+import { supabase } from "../../lib/supabase";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -54,6 +55,22 @@ export default function LoginScreen() {
     if (res.error) {
       setErrores({ email: "", password: "", general: "El correo o la contraseña no son correctos." });
       return;
+    }
+    
+    // Comprobar si el usuario tiene rutina y dieta creadas
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: rutina } = await supabase.from("rutina_semana").select("id").eq("usuario_id", user.id).limit(1);
+        const { data: dieta } = await supabase.from("dieta_semana").select("id").eq("usuario_id", user.id).limit(1);
+        
+        if (!rutina || rutina.length === 0 || !dieta || dieta.length === 0) {
+          router.replace("/auth/generating" as any);
+          return;
+        }
+      }
+    } catch (err) {
+      // Ignorar errores de red/db y permitir pasar a workout si falla la verificación
     }
     
     router.replace("/(tabs)/workout" as any);

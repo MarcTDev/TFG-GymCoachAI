@@ -114,7 +114,21 @@ export default function ResetPasswordScreen() {
       }
 
       setListo(true)
-      setTimeout(() => {
+      setTimeout(async () => {
+        try {
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user) {
+            const { data: rutina } = await supabase.from("rutina_semana").select("id").eq("usuario_id", user.id).limit(1)
+            const { data: dieta } = await supabase.from("dieta_semana").select("id").eq("usuario_id", user.id).limit(1)
+            
+            if (!rutina || rutina.length === 0 || !dieta || dieta.length === 0) {
+              router.replace('/auth/generating')
+              return
+            }
+          }
+        } catch (err) {
+          // Si falla, ignorar y proceder
+        }
         router.replace('/(tabs)/workout')
       }, 2500)
     } catch (error: any) {
